@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StockBot WMS</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* Backgrounds — noticeably lighter than before */
+    --bg:       #1a1d24;
+    --bg2:      #20242d;
+    --surface:  #252933;
+    --surface2: #2e3340;
+    --border:   #3a3f50;
+    --border2:  #454c60;
+
+    /* Accent colours — distinct, no overlap */
+    --amber:    #ffb340;   /* warm orange-gold  */
+    --green:    #3dd68c;   /* bright mint green */
+    --yellow:   #ffe066;   /* pure yellow       */
+    --red:      #ff6b6b;   /* soft red          */
+    --blue:     #60a5fa;   /* info / links      */
+
+    /* Dims (background tints) */
+    --amber-dim:  rgba(255,179,64,.13);
+    --green-dim:  rgba(61,214,140,.13);
+    --yellow-dim: rgba(255,224,102,.13);
+    --red-dim:    rgba(255,107,107,.13);
+
+    /* Text — 3-tier hierarchy, all readable */
+    --text:   #f0f2f6;   /* primary   — near white  */
+    --text2:  #b8bfcc;   /* secondary — light grey  */
+    --muted:  #717a8f;   /* tertiary  — mid grey    */
+
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-mono:    'JetBrains Mono', monospace;
+    --font-ui:      'Barlow', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-ui); min-height: 100vh; overflow-x: hidden; }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    height: 64px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 36px;
+    background: var(--bg2);
+    border-bottom: 2px solid var(--border);
+    box-shadow: 0 2px 16px rgba(0,0,0,.3);
+  }
+  .logo { display: flex; align-items: center; gap: 14px; }
+  .logo-mark {
+    width: 38px; height: 38px;
+    background: var(--amber-dim);
+    border: 2px solid var(--amber);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-mark svg { width: 20px; height: 20px; stroke: var(--amber); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .logo-name { font-family: var(--font-display); font-size: 28px; letter-spacing: .12em; color: var(--text); line-height: 1; }
+  .logo-sub  { font-family: var(--font-mono); font-size: 10px; color: var(--amber); letter-spacing: .18em; margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 18px; }
+  .live-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 6px;
+    border: 1px solid rgba(61,214,140,.35);
+    background: rgba(61,214,140,.08);
+  }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 1.6s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .live-txt { font-family: var(--font-mono); font-size: 12px; color: var(--green); letter-spacing: .1em; font-weight: 700; }
+  .clock    { font-family: var(--font-mono); font-size: 16px; color: var(--text2); letter-spacing: .06em; }
+
+  /* ── LAYOUT ── */
+  .app { padding: 30px 36px; max-width: 1520px; margin: 0 auto; }
+
+  .sec-lbl {
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    letter-spacing: .22em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+  }
+  .sec-lbl::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+
+  /* ── STAT CARDS ── */
+  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 30px; }
+
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 26px 28px;
+    position: relative; overflow: hidden;
+    transition: transform .2s, border-color .25s, box-shadow .25s;
+    animation: fadeUp .45s ease both;
+  }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,.25); }
+
+  /* top accent stripe — unique per card */
+  .stat-card::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--stripe); border-radius: 10px 10px 0 0;
+  }
+  .stat-card.s-total { --stripe: var(--amber);  }
+  .stat-card.s-ok    { --stripe: var(--green);  border-color: rgba(61,214,140,.2); }
+  .stat-card.s-low   { --stripe: var(--yellow); border-color: rgba(255,224,102,.2); }
+  .stat-card.s-out   { --stripe: var(--red);    border-color: rgba(255,107,107,.2); }
+
+  .stat-ico  { font-size: 24px; margin-bottom: 14px; display: block; }
+  .stat-num  {
+    font-family: var(--font-display); font-size: 60px; line-height: 1;
+    letter-spacing: .02em; margin-bottom: 8px;
+  }
+  .stat-card.s-total .stat-num { color: var(--amber); }
+  .stat-card.s-ok    .stat-num { color: var(--green); }
+  .stat-card.s-low   .stat-num { color: var(--yellow); }
+  .stat-card.s-out   .stat-num { color: var(--red); }
+
+  .stat-lbl { font-family: var(--font-mono); font-size: 13px; color: var(--text2); letter-spacing: .08em; text-transform: uppercase; font-weight: 700; }
+  .stat-sub { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ── MAIN GRID ── */
+  .main-grid { display: grid; grid-template-columns: 1fr 410px; gap: 22px; }
+  .left-col, .right-col { display: flex; flex-direction: column; gap: 22px; }
+
+  /* ── PANEL ── */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .panel-title { font-family: var(--font-display); font-size: 24px; letter-spacing: .1em; color: var(--text); }
+  .panel-badge {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+    color: var(--amber); background: var(--amber-dim);
+    border: 1px solid rgba(255,179,64,.3);
+    padding: 5px 13px; border-radius: 6px; letter-spacing: .06em;
+  }
+
+  /* ── TABLE ── */
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    font-family: var(--font-mono); font-size: 12px; color: var(--text2);
+    letter-spacing: .12em; text-transform: uppercase;
+    padding: 13px 20px; text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,0,0,.15); white-space: nowrap;
+    font-weight: 500;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,179,64,.04); }
+  tbody td { padding: 15px 20px; font-size: 15px; vertical-align: middle; }
+
+  .td-sku  { font-family: var(--font-mono); font-size: 13px; color: var(--amber); letter-spacing: .05em; font-weight: 700; }
+  .td-name { font-weight: 600; color: var(--text); font-size: 15px; }
+  .td-loc  {
+    font-family: var(--font-mono); font-size: 12px; color: var(--text2);
+    background: var(--surface2); padding: 4px 9px; border-radius: 4px;
+    display: inline-block; border: 1px solid var(--border);
+  }
+
+  .qty-wrap { display: flex; align-items: center; gap: 10px; min-width: 160px; }
+  .qty-val  { font-family: var(--font-mono); font-size: 15px; color: var(--text); min-width: 52px; text-align: right; font-weight: 700; }
+  .qty-bar-bg   { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; border: 1px solid var(--border); }
+  .qty-bar-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
+  .qty-min  { font-family: var(--font-mono); font-size: 12px; color: var(--muted); min-width: 34px; }
+
+  /* Status badges — each unique, no overlap */
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 5px 13px; border-radius: 5px;
+    font-family: var(--font-mono); font-size: 12px;
+    font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .badge.ok  { background: var(--green-dim);  color: var(--green);  border: 1px solid rgba(61,214,140,.3); }
+  .badge.low { background: var(--yellow-dim); color: #e6c800;       border: 1px solid rgba(255,224,102,.35); }
+  .badge.out { background: var(--red-dim);    color: var(--red);    border: 1px solid rgba(255,107,107,.3); }
+
+  .row-acts { display: flex; gap: 7px; }
+  .btn-row {
+    padding: 7px 13px; border-radius: 5px;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+    letter-spacing: .05em; cursor: pointer; transition: all .15s;
+    border: 1px solid var(--border2); background: var(--surface2); color: var(--text2);
+  }
+  .btn-row:hover      { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+  .btn-row.del:hover  { background: var(--red-dim);   border-color: var(--red);   color: var(--red); }
+
+  /* ── ADD FORM ── */
+  .form-body { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 22px 24px; }
+  .form-grp  { display: flex; flex-direction: column; gap: 7px; }
+  .form-lbl  { font-family: var(--font-mono); font-size: 12px; color: var(--text2); letter-spacing: .1em; text-transform: uppercase; font-weight: 500; }
+  .form-inp  {
+    background: var(--bg); border: 1px solid var(--border2); border-radius: 6px;
+    color: var(--text); padding: 11px 14px; font-size: 15px; font-family: var(--font-ui);
+    outline: none; transition: border-color .2s, box-shadow .2s;
+  }
+  .form-inp:focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(255,179,64,.15); }
+  .form-inp::placeholder { color: var(--muted); }
+  .form-foot { padding: 0 24px 22px; }
+  .btn-add {
+    width: 100%; padding: 14px; background: var(--amber); border: none; border-radius: 6px;
+    color: #1a1400; font-family: var(--font-display); font-size: 22px; letter-spacing: .15em;
+    cursor: pointer; font-weight: 900; transition: all .2s;
+  }
+  .btn-add:hover { background: #ffc44a; box-shadow: 0 4px 20px rgba(255,179,64,.3); transform: translateY(-1px); }
+
+  /* ── TERMINAL ── */
+  .terminal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+  .term-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; background: var(--bg2); border-bottom: 1px solid var(--border);
+  }
+  .tdots { display: flex; gap: 7px; }
+  .tdot  { width: 12px; height: 12px; border-radius: 50%; }
+  .tdot.r { background: #ff5f56; } .tdot.y { background: #ffbd2e; } .tdot.g { background: #27c93f; }
+  .term-lbl { font-family: var(--font-mono); font-size: 12px; color: var(--text2); letter-spacing: .08em; }
+
+  .term-out {
+    flex: 1; min-height: 240px; max-height: 300px; overflow-y: auto;
+    padding: 16px 18px; background: #141720;
+    font-family: var(--font-mono); font-size: 13px; line-height: 1.9;
+  }
+  .term-out::-webkit-scrollbar { width: 4px; }
+  .term-out::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .tl        { margin-bottom: 1px; }
+  .tl.sys    { color: var(--muted); font-size: 12px; }
+  .tl.prompt { color: var(--amber); font-weight: 700; }
+  .tl.ok     { color: var(--green); white-space: pre-wrap; }
+  .tl.err    { color: var(--red);   white-space: pre-wrap; }
+  .tl.res    { color: var(--text2); white-space: pre-wrap; }
+
+  .term-quick {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding: 12px 16px; border-top: 1px solid var(--border); background: var(--bg2);
+  }
+  .qbtn {
+    padding: 6px 13px; border-radius: 5px; border: 1px solid var(--border2);
+    background: var(--surface2); color: var(--text2);
+    font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+    cursor: pointer; letter-spacing: .06em; transition: all .15s;
+  }
+  .qbtn:hover { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); }
+
+  .term-inp-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border-top: 1px solid var(--border); background: #141720;
+  }
+  .term-ps  { color: var(--amber); font-family: var(--font-mono); font-size: 17px; font-weight: 700; }
+  .term-inp {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text); font-family: var(--font-mono); font-size: 14px;
+    caret-color: var(--amber); letter-spacing: .03em;
+  }
+  .term-inp::placeholder { color: var(--muted); }
+  .term-run {
+    padding: 8px 18px; background: var(--amber); border: none; border-radius: 5px;
+    color: #1a1400; font-family: var(--font-mono); font-size: 13px;
+    font-weight: 700; letter-spacing: .08em; cursor: pointer; transition: all .15s;
+  }
+  .term-run:hover { background: #ffc44a; box-shadow: 0 0 14px rgba(255,179,64,.3); }
+
+  /* ── ALERTS ── */
+  .list-body { max-height: 240px; overflow-y: auto; }
+  .list-body::-webkit-scrollbar { width: 4px; }
+  .list-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .alert-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px; border-bottom: 1px solid var(--border);
+    transition: background .15s;
+  }
+  .alert-row:last-child { border-bottom: none; }
+  .alert-row:hover { background: rgba(255,179,64,.04); }
+  .alert-ico  { font-size: 20px; flex-shrink: 0; }
+  .alert-name { font-size: 15px; font-weight: 600; color: var(--text); }
+  .alert-detail { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .empty-msg { padding: 22px; font-family: var(--font-mono); font-size: 13px; color: var(--green); }
+
+  /* ── ACTIVITY ── */
+  .act-row {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 13px 22px; border-bottom: 1px solid var(--border);
+    animation: fadeUp .3s ease both;
+  }
+  .act-row:last-child { border-bottom: none; }
+  .act-pip  {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--amber); margin-top: 5px; flex-shrink: 0;
+    box-shadow: 0 0 7px rgba(255,179,64,.5);
+  }
+  .act-cmd  { font-family: var(--font-mono); font-size: 14px; color: var(--text); font-weight: 500; }
+  .act-time { font-size: 12px; color: var(--muted); margin-top: 3px; font-family: var(--font-mono); }
+
+  /* ── MODAL ── */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.75);
+    backdrop-filter: blur(6px); z-index: 200;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 12px; padding: 32px; width: 390px;
+    transform: scale(.95); transition: transform .2s;
+    box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  }
+  .overlay.open .modal { transform: scale(1); }
+  .modal-title { font-family: var(--font-display); font-size: 30px; color: var(--red); letter-spacing: .1em; margin-bottom: 12px; }
+  .modal-body  { font-size: 15px; color: var(--text2); line-height: 1.65; }
+  .modal-sku   { color: var(--text); font-weight: 700; font-family: var(--font-mono); }
+  .modal-btns  { display: flex; gap: 12px; margin-top: 24px; }
+  .btn-cancel {
+    flex: 1; padding: 12px; background: transparent;
+    border: 1px solid var(--border2); border-radius: 6px; color: var(--text2);
+    font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all .15s; letter-spacing: .06em;
+  }
+  .btn-cancel:hover { border-color: var(--text2); color: var(--text); }
+  .btn-del {
+    flex: 1; padding: 12px; background: var(--red); border: none; border-radius: 6px;
+    color: #fff; font-family: var(--font-display); font-size: 22px; letter-spacing: .1em;
+    cursor: pointer; transition: all .15s;
+  }
+  .btn-del:hover { background: #ff8080; box-shadow: 0 4px 18px rgba(255,107,107,.35); }
+
+  /* ── TOAST ── */
+  .toasts { position: fixed; bottom: 28px; right: 28px; z-index: 300; display: flex; flex-direction: column; gap: 10px; }
+  .toast {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px; border-radius: 8px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    box-shadow: 0 8px 28px rgba(0,0,0,.4);
+    font-family: var(--font-mono); font-size: 14px; color: var(--text);
+    animation: slideIn .3s ease; min-width: 290px;
+  }
+  .toast.ok  { border-left: 3px solid var(--green); }
+  .toast.err { border-left: 3px solid var(--red); }
+  @keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 1200px) { .main-grid { grid-template-columns: 1fr; } .stats-row { grid-template-columns: repeat(2,1fr); } }
+  @media (max-width: 600px)  { .app { padding: 18px 14px; } header { padding: 0 18px; } .form-body { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <div>
+      <div class="logo-name">STOCKBOT</div>
+      <div class="logo-sub">WAREHOUSE MANAGEMENT SYSTEM</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-pill">
+      <div class="live-dot"></div>
+      <span class="live-txt">LIVE</span>
+    </div>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- STATS -->
+  <div class="sec-lbl">OVERVIEW</div>
+  <div class="stats-row">
+    <div class="stat-card s-total" style="animation-delay:.00s">
+      <span class="stat-ico">📦</span>
+      <div class="stat-num" id="sTotal">—</div>
+      <div class="stat-lbl">Total SKUs</div>
+      <div class="stat-sub">Items tracked</div>
+    </div>
+    <div class="stat-card s-ok" style="animation-delay:.07s">
+      <span class="stat-ico">✅</span>
+      <div class="stat-num" id="sOk">—</div>
+      <div class="stat-lbl">In Stock</div>
+      <div class="stat-sub">Above threshold</div>
+    </div>
+    <div class="stat-card s-low" style="animation-delay:.14s">
+      <span class="stat-ico">⚠️</span>
+      <div class="stat-num" id="sLow">—</div>
+      <div class="stat-lbl">Low Stock</div>
+      <div class="stat-sub">Needs attention</div>
+    </div>
+    <div class="stat-card s-out" style="animation-delay:.21s">
+      <span class="stat-ico">🚨</span>
+      <div class="stat-num" id="sOut">—</div>
+      <div class="stat-lbl">Out of Stock</div>
+      <div class="stat-sub">Reorder now</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+    <div class="left-col">
+
+      <!-- INVENTORY -->
+      <div class="sec-lbl">INVENTORY</div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">STOCK LEVELS</span>
+          <span class="panel-badge" id="invBadge">0 ITEMS</span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th><th>Item Name</th><th>Stock / Min</th>
+                <th>Location</th><th>Status</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="invBody">
+              <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--font-mono);font-size:13px;">Loading inventory...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ADD FORM -->
+      <div class="sec-lbl">ADD NEW ITEM</div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">NEW STOCK ENTRY</span></div>
+        <div class="form-body">
+          <div class="form-grp"><label class="form-lbl">SKU</label><input class="form-inp" id="fSku" placeholder="WH-007" /></div>
+          <div class="form-grp"><label class="form-lbl">Item Name</label><input class="form-inp" id="fName" placeholder="Product name" /></div>
+          <div class="form-grp"><label class="form-lbl">Quantity</label><input class="form-inp" id="fQty" type="number" placeholder="0" /></div>
+          <div class="form-grp"><label class="form-lbl">Min Threshold</label><input class="form-inp" id="fMin" type="number" placeholder="10" /></div>
+          <div class="form-grp"><label class="form-lbl">Unit</label><input class="form-inp" id="fUnit" placeholder="pcs" /></div>
+          <div class="form-grp"><label class="form-lbl">Location</label><input class="form-inp" id="fLoc" placeholder="A-01" /></div>
+        </div>
+        <div class="form-foot">
+          <button class="btn-add" onclick="addItem()">+ ADD TO INVENTORY</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <div class="right-col">
+
+      <!-- TERMINAL -->
+      <div class="sec-lbl">BOT TERMINAL</div>
+      <div class="terminal">
+        <div class="term-head">
+          <div class="tdots"><div class="tdot r"></div><div class="tdot y"></div><div class="tdot g"></div></div>
+          <span class="term-lbl">stockbot@wms ~ $</span>
+        </div>
+        <div class="term-out" id="termOut">
+          <div class="tl sys">StockBot WMS v1.0.0 — initialized</div>
+          <div class="tl sys">Connected to inventory database</div>
+          <div class="tl sys">─────────────────────────────────</div>
+          <div class="tl sys">Type HELP to see all commands</div>
+        </div>
+        <div class="term-quick">
+          <button class="qbtn" onclick="qrun('HELP')">HELP</button>
+          <button class="qbtn" onclick="qrun('LOW STOCK')">LOW STOCK</button>
+          <button class="qbtn" onclick="qrun('REPORT DAILY')">DAILY REPORT</button>
+          <button class="qbtn" onclick="qrun('CHECK WH-001')">CHECK WH-001</button>
+        </div>
+        <div class="term-inp-row">
+          <span class="term-ps">$</span>
+          <input class="term-inp" id="termInp" placeholder="e.g. CHECK WH-002" onkeydown="if(event.key==='Enter')sendCmd()" />
+          <button class="term-run" onclick="sendCmd()">RUN</button>
+        </div>
+      </div>
+
+      <!-- ALERTS -->
+      <div class="sec-lbl">ALERTS</div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">STOCK ALERTS</span>
+          <span class="panel-badge" id="alertBadge">0</span>
+        </div>
+        <div class="list-body" id="alertsBody">
+          <div class="empty-msg">✓ All stock levels normal</div>
+        </div>
+      </div>
+
+      <!-- ACTIVITY -->
+      <div class="sec-lbl">ACTIVITY</div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">RECENT ACTIVITY</span>
+          <span class="panel-badge" id="actBadge">0</span>
+        </div>
+        <div class="list-body" id="actBody">
+          <div class="empty-msg" style="color:var(--muted)">No activity yet</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="overlay" id="delOverlay">
+  <div class="modal">
+    <div class="modal-title">CONFIRM DELETE</div>
+    <div class="modal-body">Remove <span class="modal-sku" id="delSkuLabel"></span> from inventory? This cannot be undone.</div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">CANCEL</button>
+      <button class="btn-del" onclick="confirmDel()">DELETE</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+  (function tick(){ document.getElementById('clock').textContent = new Date().toLocaleTimeString(); setTimeout(tick,1000); })();
+
+  function toast(msg, type='ok') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span>${type==='ok'?'✓':'✗'}</span> ${msg}`;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(()=>el.remove(), 3500);
+  }
+
+  async function api(path, opts={}) {
+    const r = await fetch(path, { headers:{'Content-Type':'application/json'}, ...opts });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  async function loadStats() {
+    try {
+      const d = await api('/api/stats');
+      document.getElementById('sTotal').textContent = d.totalSKUs;
+      document.getElementById('sOk').textContent    = d.inStock;
+      document.getElementById('sLow').textContent   = d.lowStock;
+      document.getElementById('sOut').textContent   = d.outOfStock;
+      document.getElementById('alertBadge').textContent = d.alerts.length;
+
+      document.getElementById('alertsBody').innerHTML = d.alerts.length === 0
+        ? '<div class="empty-msg">✓ All stock levels normal</div>'
+        : d.alerts.map(a=>`
+            <div class="alert-row">
+              <span class="alert-ico">${a.status==='out'?'🚨':'⚠️'}</span>
+              <div>
+                <div class="alert-name">${a.name}</div>
+                <div class="alert-detail">${a.sku} · ${a.qty} / ${a.min} ${a.unit}</div>
+              </div>
+            </div>`).join('');
+
+      document.getElementById('actBadge').textContent = d.recentActivity.length;
+      document.getElementById('actBody').innerHTML = d.recentActivity.length === 0
+        ? '<div class="empty-msg" style="color:var(--muted)">No activity yet</div>'
+        : d.recentActivity.map(a=>`
+            <div class="act-row">
+              <div class="act-pip"></div>
+              <div>
+                <div class="act-cmd">${a.cmd}</div>
+                <div class="act-time">${new Date(a.time).toLocaleTimeString()}</div>
+              </div>
+            </div>`).join('');
+    } catch(e){ console.error('Stats:',e); }
+  }
+
+  async function loadInventory() {
+    try {
+      const d = await api('/api/inventory');
+      document.getElementById('invBadge').textContent = `${d.total} ITEMS`;
+      const tb = document.getElementById('invBody');
+      if (!d.items.length) {
+        tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--font-mono);font-size:13px;">No items in inventory</td></tr>';
+        return;
+      }
+      tb.innerHTML = d.items.map(item => {
+        const pct   = item.min>0 ? Math.min((item.qty/(item.min*2))*100,100) : 100;
+        const color = item.status==='ok'?'var(--green)':item.status==='low'?'var(--yellow)':'var(--red)';
+        return `<tr>
+          <td><span class="td-sku">${item.sku}</span></td>
+          <td><span class="td-name">${item.name}</span></td>
+          <td>
+            <div class="qty-wrap">
+              <span class="qty-val">${item.qty}</span>
+              <div class="qty-bar-bg"><div class="qty-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+              <span class="qty-min">${item.min}</span>
+            </div>
+          </td>
+          <td><span class="td-loc">${item.location}</span></td>
+          <td><span class="badge ${item.status}">${item.status.toUpperCase()}</span></td>
+          <td>
+            <div class="row-acts">
+              <button class="btn-row" onclick="qAdd('${item.sku}')">+ADD</button>
+              <button class="btn-row" onclick="qRem('${item.sku}')">−REM</button>
+              <button class="btn-row del" onclick="openDel('${item.sku}')">DEL</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    } catch(e){ console.error('Inventory:',e); }
+  }
+
+  function tprint(text, cls='res') {
+    const out = document.getElementById('termOut');
+    text.split('\n').forEach(line => {
+      const d = document.createElement('div');
+      d.className = `tl ${cls}`; d.textContent = line; out.appendChild(d);
+    });
+    out.scrollTop = out.scrollHeight;
+  }
+
+  async function sendCmd() {
+    const inp = document.getElementById('termInp');
+    const cmd = inp.value.trim(); if(!cmd) return;
+    inp.value = '';
+    tprint(`$ ${cmd}`, 'prompt');
+    try {
+      const d = await api('/api/bot/command',{method:'POST',body:JSON.stringify({command:cmd,user:'Dashboard'})});
+      tprint(d.text, d.ok?'ok':'err');
+      await refresh();
+    } catch(e){ tprint(`Error: ${e.message}`,'err'); }
+  }
+
+  function qrun(cmd){ document.getElementById('termInp').value=cmd; sendCmd(); }
+
+  async function addItem() {
+    const sku  = document.getElementById('fSku').value.trim();
+    const name = document.getElementById('fName').value.trim();
+    const qty  = document.getElementById('fQty').value;
+    const min  = document.getElementById('fMin').value;
+    const unit = document.getElementById('fUnit').value.trim()||'pcs';
+    const loc  = document.getElementById('fLoc').value.trim()||'TBD';
+    if(!sku||!name){ toast('SKU and Name are required','err'); return; }
+    try {
+      await api('/api/inventory',{method:'POST',body:JSON.stringify({sku,name,qty:parseInt(qty)||0,min:parseInt(min)||0,unit,location:loc})});
+      toast(`${sku} added to inventory`);
+      ['fSku','fName','fQty','fMin','fUnit','fLoc'].forEach(id=>document.getElementById(id).value='');
+      await refresh();
+    } catch(e){ toast(e.message,'err'); }
+  }
+
+  async function qAdd(sku){ const q=prompt(`Add quantity to ${sku}:`); if(!q||isNaN(q)||+q<=0)return; await botCmd(`ADD ${sku} ${q}`); }
+  async function qRem(sku){ const q=prompt(`Remove quantity from ${sku}:`); if(!q||isNaN(q)||+q<=0)return; await botCmd(`REMOVE ${sku} ${q}`); }
+  async function botCmd(cmd){
+    try {
+      const d = await api('/api/bot/command',{method:'POST',body:JSON.stringify({command:cmd,user:'Dashboard'})});
+      toast(d.ok?`${cmd} — done`:d.text, d.ok?'ok':'err');
+      await refresh();
+    } catch(e){ toast(e.message,'err'); }
+  }
+
+  let pendingDel = null;
+  function openDel(sku){ pendingDel=sku; document.getElementById('delSkuLabel').textContent=sku; document.getElementById('delOverlay').classList.add('open'); }
+  function closeModal(){ document.getElementById('delOverlay').classList.remove('open'); pendingDel=null; }
+  async function confirmDel(){
+    if(!pendingDel)return;
+    try {
+      await api(`/api/inventory/${pendingDel}`,{method:'DELETE'});
+      toast(`${pendingDel} deleted`); closeModal(); await refresh();
+    } catch(e){ toast(e.message,'err'); }
+  }
+
+  async function refresh(){ await Promise.all([loadInventory(), loadStats()]); }
+  refresh();
+  setInterval(refresh, 30000);
+</script>
+</body>
+</html>
